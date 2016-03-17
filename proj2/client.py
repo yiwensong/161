@@ -9,6 +9,8 @@ Client class conforms to the specification. Be sure to test against the
 included functionality tests.
 """
 
+IV_LEN = 16
+
 from base_client import BaseClient, IntegrityError
 from crypto import CryptoError
 
@@ -20,68 +22,112 @@ class Client(BaseClient):
         super().__init__(storage_server, public_key_server, crypto_object,
                          username)
         self.public_key = self.pks.get_public_key(self.username)
+        self.key_dict = dict()
     # self.username
     # self.storage_server
     # self.pks
     # self.crypto
     # self.private_key
-    def get_storage_name(username,name):
-      storage_name = self.username + '\xba\x5e\xd6\x0d' + name
-      return storage_name
+    def get_storage_name(self,name):
+      '''Makes $username->$name and $username->$name.key strings and hashes them
+      so you can securely store it on the server'''
+      storage_name = self.username + '->' + name
+      name_hash = self.crypto.cryptographic_hash(storage_name,'SHA512')
+      key_hash = self.crypto.cryptographic_hash(storage_name + '.key','SHA512')
+      return name_hash,key_hash
 
-    def gen_symm_keys(crypto,key=None):
+    def gen_symm_keys(self,key=None,n=4):
+      '''Generates symmetric key quadruples for use in CBC and MAC. Last two keys are currently unused.
+      More or less used as a psuedorandom number generator.'''
       if key is None:
-        key = crypto.get_random_bytes(Client.KEYLEN)
+        key = self.crypto.get_random_bytes(Client.KEYLEN)
+      if n is None or n<4:
+        n = 4
 
-      text = '\0'*4*Client.KEYLEN
-      counter = crypto.new_counter(Client.KEYLEN*8)
-      genkey = crypto.symmetric_encrypt(text,key,cipher_name='AES',mode_name='CTR',counter=counter)
+      if len(key) != Client.KEYLEN*2:
+        raise IntegrityError
+
+      if key in self.key_dict:
+        return self.key_dict[key]
+
+      text = '\0'*n*Client.KEYLEN
+      counter = self.crypto.new_counter(Client.KEYLEN*8)
+      genkey = self.crypto.symmetric_encrypt(text,key,cipher_name='AES',mode_name='CTR',counter=counter)
       
-      k1 = genkey[:KEYLEN]
-      k2 = genkey[KEYLEN:2*KEYLEN]
-      k3 = genkey[2*KEYLEN:3*KEYLEN]
-      k4 = genkey[3*KEYLEN:]
+      k1 = genkey[:Client.KEYLEN*2]
+      k2 = genkey[Client.KEYLEN*2:4*Client.KEYLEN]
+      k3 = genkey[4*Client.KEYLEN:6*Client.KEYLEN]
+      k4 = genkey[6*Client.KEYLEN:]
+
+      self.key_dict[key] = (key,k1,k2,k3,k4)
 
       return key,k1,k2,k3,k4
 
     def upload(self, name, value):
-        # Replace with your implementation
-        keychain = Client.gen_symm_keys(self.crypto)
+        ''' 1. Calculates symmetric keys
+        2. Uploads the seed key and signature to $username->$name.key (enc with RSA Pr, signed with RSA Pr)
+        3. Uploads the MAC, IV, and ciphertext to $username->$name (enc with k1, MAC with k2)'''
+        k,k1,k2,k3,k4 = self.gen_symm_keys()
 
-        storage_name = self.username + '\xba\x5e\xd6\x0d' + name
-        name_hash = self.crypto.cryptographic_hash(storage_name,'SHA512')
+        name_hash,key_hash = self.get_storage_name(name)
 
-        sym_key = self.crypto.get_random_bytes(2048)
-        encrypted = self.crypto.asymmetric_encrypt(value,self.public_key)
+        sym_key = k
+        sym_key_enc = self.crypto.asymmetric_encrypt(sym_key,self.public_key)
+        sym_key_sig = self.crypto.asymmetric_sign(sym_key_enc,self.private_key)
+        keylen = chr(len(sym_key_sig))
 
-        sig = self.crypto.asymmetric_sign(encrypted,self.private_key)
-        keylen = chr(len(sig))
-        put_value = keylen + sig + encrypted
+        self.storage_server.put(key_hash,keylen + sym_key_sig + sym_key_enc)
+
+        IV = self.crypto.get_random_bytes(IV_LEN)
+        encrypted = self.crypto.symmetric_encrypt(value,k1,cipher_name='AES',mode_name='CBC',IV=IV)
+        encrypted = IV + encrypted
+
+        mac = self.crypto.message_authentication_code(value,k2,hash_name='SHA512')
+
+        maclen = chr(len(mac))
+        put_value = maclen + mac + encrypted
         self.storage_server.put(name_hash,put_value)
 
-    def download(self, name):
-        # Replace with your implementation
-        storage_name = self.username + '\xba\x5e\xd6\x0d' + name
-        name_hash = self.crypto.cryptographic_hash(storage_name,'SHA512')
-        put_value = self.storage_server.get(name_hash)
 
-        if put_value is None:
+    def download(self, name):
+        '''1. Finds the keys from $username->$name.key, checks integrity of k (RSA)
+        2. Calculate symmetric keys with k
+        3. Decrypt and MAC the message (k1,k2) '''
+        name_hash,key_hash = self.get_storage_name(name)
+
+        key_enc = self.storage_server.get(key_hash)
+        if key_enc is None:
           return None
 
+        keylen = ord(key_enc[0])
+
+        sym_key_sig = key_enc[1:keylen+1]
+        sym_key_enc = key_enc[keylen+1:]
+
+        if not self.crypto.asymmetric_verify(sym_key_enc,sym_key_sig,self.public_key):
+          raise IntegrityError
+
+        k = self.crypto.asymmetric_decrypt(sym_key_enc,self.private_key)
+        k,k1,k2,k3,k4 = self.gen_symm_keys(k)
+
+        msg_enc = self.storage_server.get(name_hash)
+        if msg_enc is None:
+          return None
+
+        maclen = ord(msg_enc[0])
+
+        if len(msg_enc) < maclen + 1:
+          raise IntegrityError
+
         try:
-          keylen = ord(put_value[0])
+          mac = msg_enc[1:maclen+1]
+          IV = msg_enc[maclen+1:maclen+1+IV_LEN*2]
+          encrypted = msg_enc[maclen+1+IV_LEN*2:]
+          value = self.crypto.symmetric_decrypt(encrypted,k1,cipher_name='AES',mode_name='CBC',IV=IV)
         except:
           raise IntegrityError
-
-        if len(put_value) < keylen+1:
-          raise IntegriftyError
-
-        sig = put_value[1:keylen+1]
-        encrypted = put_value[keylen+1:]
-        if not self.crypto.asymmetric_verify(encrypted,sig,self.public_key):
+        if self.crypto.message_authentication_code(value,k2,hash_name='SHA512') != mac:
           raise IntegrityError
-
-        value = self.crypto.asymmetric_decrypt(encrypted,self.private_key)
         return value
 
     def share(self, user, name):
