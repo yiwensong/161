@@ -535,6 +535,7 @@ class Crypto(object):
           * The original message without the padding.
         """
         skip = message[-1]
+        #print(message[-16:])
         for i in range(1, skip+1):
             # print(i, ord(message[-i]), skip-i+1)
             if message[-i] != skip-i+1:

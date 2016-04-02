@@ -101,6 +101,13 @@ def t06_ManyGetPuts(C, pks, crypto, server):
             total += 1
     return float(good) / total
 
+def t07_SimpleGetPut(C, pks, crypto, server):
+    """Tests that the server can handle long file names and keys"""
+    alice = C("alice")
+    alice.upload("a"*1000, "b"*1000)
+    return alice.download("a"*1000) == "b"*1000
+
+
 gs = dict(globals())
 
 functionality_tests = []

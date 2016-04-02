@@ -13,9 +13,11 @@ IV_LEN = 16
 
 from base_client import BaseClient, IntegrityError
 from crypto import CryptoError
+from util import *
+
+KEYLEN = 16
 
 class Client(BaseClient):
-    KEYLEN = 16
 
     def __init__(self, storage_server, public_key_server, crypto_object,
                  username):

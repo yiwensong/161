@@ -31,7 +31,6 @@ def to_json_string(obj):
     """
     class RSAEncoder(json.JSONEncoder):
         def default(self, obj):
-            print(type(obj))
             if isinstance(obj, Crypto.PublicKey.RSA._RSAobj):
                 return {'__type__': '_RSAobj', 'PEMdata':
                         str(obj.exportKey(format='PEM'), 'utf-8')}
