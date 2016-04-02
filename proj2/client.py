@@ -42,24 +42,24 @@ class Client(BaseClient):
       '''Generates symmetric key quadruples for use in CBC and MAC. Last two keys are currently unused.
       More or less used as a psuedorandom number generator.'''
       if key is None:
-        key = self.crypto.get_random_bytes(Client.KEYLEN)
+        key = self.crypto.get_random_bytes(KEYLEN)
       if n is None or n<4:
         n = 4
 
-      if len(key) != Client.KEYLEN*2:
+      if len(key) != KEYLEN*2:
         raise IntegrityError
 
       if key in self.key_dict:
         return self.key_dict[key]
 
-      text = '\0'*n*Client.KEYLEN
-      counter = self.crypto.new_counter(Client.KEYLEN*8)
+      text = '\0'*n*KEYLEN
+      counter = self.crypto.new_counter(KEYLEN*8)
       genkey = self.crypto.symmetric_encrypt(text,key,cipher_name='AES',mode_name='CTR',counter=counter)
       
-      k1 = genkey[:Client.KEYLEN*2]
-      k2 = genkey[Client.KEYLEN*2:4*Client.KEYLEN]
-      k3 = genkey[4*Client.KEYLEN:6*Client.KEYLEN]
-      k4 = genkey[6*Client.KEYLEN:]
+      k1 = genkey[:KEYLEN*2]
+      k2 = genkey[KEYLEN*2:4*KEYLEN]
+      k3 = genkey[4*KEYLEN:6*KEYLEN]
+      k4 = genkey[6*KEYLEN:]
 
       self.key_dict[key] = (key,k1,k2,k3,k4)
 
