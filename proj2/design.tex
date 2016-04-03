@@ -1,0 +1,174 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[inline]{enumitem}
+\graphicspath{{img/}}
+\usepackage{listings}
+
+\title{Project 2 Design Doc - CS161}
+\author{yiwen song (cs161-jp), Huadian Henry Zhang (cs161-sy)}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Design Summary}
+The basic structure of our secure distributed storage system is as follows:
+\begin{enumerate}
+\item Userdata block to generate user-specific keys
+\item File Metadata block to generate file-specific keys
+\item Sharing block to generate keys for files shared with the user
+\item Data block to actually store the files
+\end{enumerate}
+At the beginning, we have the RSA keys for the user $(K_U, K_U^{-1})$.
+All non-MAC and non-Signature entries will be put into a JSON string.
+Any MACs and RSA signatures used will be inputted with this JSON string.
+Then the original JSON string and the MAC/Signature are put into a new JSON string and uploaded.
+\\ \\
+This design uses a PRNG.
+This PRNG is made with AES-CTR.
+Setting the IV and counter to be 0, we then input the seed as the key of this encryption algorithm.
+The resulting stream of output is used as keys for other things such as encryption or MAC.
+
+\subsection{Userdata}
+\subsubsection{Naming}
+The Userdata section is named \textit{username}\texttt{.userdata}.
+
+\subsubsection{Contents}
+The Userdata block contains the following:
+\begin{enumerate}
+\item Username
+\item PRNG seed $S_U$
+\item RSA Signature
+\end{enumerate}
+
+\subsubsection{Actions}
+\label{sssec:userdata_actions}
+The Userdata block is encrypted with asymmetric RSA using the user's public key.
+The signature is signed using the user's private key.
+After obtaining the Userdata block, the user will generate the following keys using the PRNG with seed $S_U$:
+\begin{enumerate}
+\item Encryption key for Metadata block $K_E$
+\item MAC key for Metadata block $K_A$
+\item Name-hash key for Metadata block $K_N$
+\item Encryption key for Sharing block $K_F$
+\item MAC key for Sharing block $K_B$
+\end{enumerate}
+We should also check that the username matches and use verify on the signature to make sure that the data is
+not tampered with.
+
+\subsection{Metadata}
+\subsubsection{Naming}
+Let $s = username\texttt{.}filename\texttt{.meta}$.
+Using $K_N$ found in \ref{sssec:userdata_actions}, we find $m = \text{SHA256-HMAC}_{K_N}(s)$.
+This file will be stored at $m$.
+
+\subsubsection{Contents}
+The Metadata block contains the following:
+\begin{enumerate}
+\item Filename
+\item PRNG seed $S_M$
+\item Number of Blocks
+\item Sharing list
+\item MAC
+\end{enumerate}
+
+\subsubsection{Actions}
+\label{sssec:meta_actions}
+The Metadata block is encrypted with AES-CBC using $K_E$.
+The MAC of the Metadata block is calculated using $K_A$.
+(Keys are from \ref{sssec:userdata_actions})
+The number of blocks is calculated by taking the ceiling of the filesize divided by the block size,
+which is set to be 32 KB.
+From $S_M$, we should use the PRNG to generate the following keys:
+\begin{enumerate}
+\item Encryption key for Data block $K_G$
+\item MAC key for Data block $K_C$
+\item Name-hash key for Data block $K_M$
+\end{enumerate}
+When the user gets the block from the server, the two checks that occur are that the MAC is valid and that
+the filename matches the filename that the user is attempting to access.
+\\ \\
+Whenever we add a user as a collaborator on a file, we generate a random seed and copy information from
+this Metadata block (more about this in \ref{ssec:sharing}) to the file corresponding to that seed.
+Then, we add the tuple $(username,randomname)$ to the sharing list.
+\\ \\
+To remove collaborators, we have to generate an entirely new Metadata block and copy all contents of a file
+to a new location.
+Then we remove the tuple from the Sharing list.
+
+\subsection{Sharing}
+\label{ssec:sharing}
+\subsubsection{Naming}
+The sharing block for a user is named $username\texttt{.sharing}$.
+
+\subsubsection{Contents}
+\begin{enumerate}
+\item Username
+\item Shared list
+\item MAC
+\end{enumerate}
+
+\subsubsection{Actions}
+The Sharing block is encrypted with $K_F$
+and MAC with $K_B$ (both from \ref{sssec:userdata_actions}).
+The shared list contains tuples in the format $(username, filename, S_F)$.
+For sharing, we can generate 3 keys from the seed:
+\begin{enumerate}
+\item Key for encryption $K_{SE}$
+\item Key for MAC $K_{SA}$
+\item Key for naming $K_{SN}$
+\end{enumerate}
+The Metadata block will be stored using the same scheme as the regular Metadata storage, and this block
+can be accessed as though the file belongs to the user that is shared with.
+When a user receives a sharing message, he should decrypt that message with his private RSA key and add
+the tuple to the Shared list in this block.
+Similarly, when a user shares any file, the share should send a message that is this tuple encrypted with the
+receiving user's public RSA key.
+
+\subsection{Data}
+\subsubsection{Naming}
+Let $s = username\texttt{.}filename\texttt{.}n\texttt{.data}$ where $n$ is the block number.
+Using $K_M$ found in \ref{sssec:meta_actions}, we find $m = \text{SHA256-HMAC}_{K_M}(s)$.
+This file will be stored at $m$.
+
+\subsubsection{Contents}
+File name and block numbers are stored to check for block swapping by adversaries.
+32KB of data is stored.
+Each block has a randomly generated salt (generated every time a block is made) to prevent adversaries from
+being able to compare two blocks with the same information and knowing what they are.
+Finally, there is a MAC to make sure that nothing is tampered with.
+
+\subsubsection{Actions}
+This block is encrypted with $K_G$ and the MAC uses $K_C$, both from \ref{sssec:meta_actions}.
+The MAC should be checked before the data is used.
+When the data is received, the file name and block number should also be checked to make sure that they
+match what is expected.
+When all the Data blocks are downloaded and verified for integrity, simply piece the data in block order
+and return the string.
+
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
