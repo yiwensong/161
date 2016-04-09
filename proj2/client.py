@@ -145,10 +145,13 @@ class Client(BaseClient):
       self.storage_server.put(self.b64_id(key), self.b64_id(value))
 
     def get_raw(self, key):
-      d = self.storage_server.get(self.b64_id(key))
-      if d is None:
-        return d
-      return self.unb64_id(d)
+      try:
+        d = self.storage_server.get(self.b64_id(key))
+        if d is None:
+          return d
+        return self.unb64_id(d)
+      except:
+        raise IntegrityError
 
     def make_data_block(self, filename, data_seg, enc_key, mac_key, block_num):
       info = {'f': self.b64_id(filename) + str(block_num),
@@ -368,6 +371,7 @@ class FileDB(object):
       self.files = self.client.retrieve_json(ct, self.encryption_key, self.mac_key)
 
   def get_fd(self, filename):
+    self.load()
     if not filename in self.files:
       return None
 
@@ -376,6 +380,7 @@ class FileDB(object):
     return FileDescriptor.from_dict(self.client, self.files[filename])
 
   def get_fd_raw(self, filename):
+    self.load()
     if not filename in self.files:
       return None
 
