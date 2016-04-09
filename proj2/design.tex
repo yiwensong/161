@@ -15,139 +15,114 @@
 \maketitle
 
 \section{Design Summary}
-The basic structure of our secure distributed storage system is as follows:
-\begin{enumerate}
-\item Userdata block to generate user-specific keys
-\item File Metadata block to generate file-specific keys
-\item Sharing block to generate keys for files shared with the user
-\item Data block to actually store the files
-\end{enumerate}
-At the beginning, we have the RSA keys for the user $(K_U, K_U^{-1})$.
-All non-MAC and non-Signature entries will be put into a JSON string.
-Any MACs and RSA signatures used will be inputted with this JSON string.
-Then the original JSON string and the MAC/Signature are put into a new JSON string and uploaded.
-\\ \\
-This design uses a PRNG.
-This PRNG is made with AES-CTR.
-Setting the IV and counter to be 0, we then input the seed as the key of this encryption algorithm.
-The resulting stream of output is used as keys for other things such as encryption or MAC.
+\subsection{User}
+User stores a location of the file database and a PRNG seed to derive encryption and MAC keys for the file
+database, and the username (for anti-spoofing). 
+(Encrypted with a symmetric key encrypted and signed with public key).
+Located at HASH(username.userdata.DERexport($K_{user}^{-1}$)).
 
-\subsection{Userdata}
-\subsubsection{Naming}
-The Userdata section is named \textit{username}\texttt{.userdata}.
-
-\subsubsection{Contents}
-The Userdata block contains the following:
-\begin{enumerate}
-\item Username
-\item PRNG seed $S_U$
-\item RSA Signature
-\end{enumerate}
-
-\subsubsection{Actions}
-\label{sssec:userdata_actions}
-The Userdata block is encrypted with asymmetric RSA using the user's public key.
-The signature is signed using the user's private key.
-After obtaining the Userdata block, the user will generate the following keys using the PRNG with seed $S_U$:
-\begin{enumerate}
-\item Encryption key for Metadata block $K_E$
-\item MAC key for Metadata block $K_A$
-\item Name-hash key for Metadata block $K_N$
-\item Encryption key for Sharing block $K_F$
-\item MAC key for Sharing block $K_B$
-\end{enumerate}
-We should also check that the username matches and use verify on the signature to make sure that the data is
-not tampered with.
-
-\subsection{Metadata}
-\subsubsection{Naming}
-Let $s = username\texttt{.}filename\texttt{.meta}$.
-Using $K_N$ found in \ref{sssec:userdata_actions}, we find $m = \text{SHA256-HMAC}_{K_N}(s)$.
-This file will be stored at $m$.
-
-\subsubsection{Contents}
-The Metadata block contains the following:
-\begin{enumerate}
+\subsection{File Database}
+Name is randomly generated.
+Encryption and MAC keys are derived from User file (generated from random PRNG seed).
+Contents - contains a dictionary of the tuple:
+\begin{itemize}
 \item Filename
-\item PRNG seed $S_M$
-\item Number of Blocks
-\item Sharing list
-\item MAC
-\end{enumerate}
+\item Enc Key
+\item Mac Key
+\end{itemize}
+Each of these point to either a file descriptor or a sharing descriptor.
 
-\subsubsection{Actions}
-\label{sssec:meta_actions}
-The Metadata block is encrypted with AES-CBC using $K_E$.
-The MAC of the Metadata block is calculated using $K_A$.
-(Keys are from \ref{sssec:userdata_actions})
-The number of blocks is calculated by taking the ceiling of the filesize divided by the block size,
-which is set to be 32 KB.
-From $S_M$, we should use the PRNG to generate the following keys:
+\subsection{File Descriptor}
+Each FD contains:
 \begin{enumerate}
-\item Encryption key for Data block $K_G$
-\item MAC key for Data block $K_C$
-\item Name-hash key for Data block $K_M$
+\item the number of blocks in the file
+\item a nonce
+\item pointer to the latest transaction log entry (if any)
+\item encryption key and MAC key of that log entry
+\item encrypted and MAC shared list using the owner's PRNG seed
 \end{enumerate}
-When the user gets the block from the server, the two checks that occur are that the MAC is valid and that
-the filename matches the filename that the user is attempting to access.
-\\ \\
-Whenever we add a user as a collaborator on a file, we generate a random seed and copy information from
-this Metadata block (more about this in \ref{ssec:sharing}) to the file corresponding to that seed.
-Then, we add the tuple $(username,randomname)$ to the sharing list.
-\\ \\
-To remove collaborators, we have to generate an entirely new Metadata block and copy all contents of a file
-to a new location.
-Then we remove the tuple from the Sharing list.
 
-\subsection{Sharing}
-\label{ssec:sharing}
-\subsubsection{Naming}
-The sharing block for a user is named $username\texttt{.sharing}$.
+\subsection{Share List}
+Each ShareList file is associated with a File Descriptor, and is located at the location obtained by $HMAC_{userdata.prngseed}(fileDescriptorName.sharing)$. The file is encrypted with the owner's File Database encryption and MAC keys, and thus makes it accessible to only the owner.
 
-\subsubsection{Contents}
+The ShareList contains a map of usernames to tuples of SharedDescriptor filename, encryption key, and MAC key.
+
+\subsection{Shared Descriptor}
+Contains:
 \begin{enumerate}
-\item Username
-\item Shared list
-\item MAC
+\item Filename of parent
+\item Enc Key of parent
+\item MAC key of parent
 \end{enumerate}
+Points to parent, which is either a shared descriptor or a file descriptor.
 
-\subsubsection{Actions}
-The Sharing block is encrypted with $K_F$
-and MAC with $K_B$ (both from \ref{sssec:userdata_actions}).
-The shared list contains tuples in the format $(username, filename, S_F)$.
-For sharing, we can generate 3 keys from the seed:
+\subsection{Transaction Log}
+Contains:
 \begin{enumerate}
-\item Key for encryption $K_{SE}$
-\item Key for MAC $K_{SA}$
-\item Key for naming $K_{SN}$
+\item Nonse of the file descriptor update
+\item Block numbers of the changes in that file
+\item File descriptor and keys for the next descriptor and log entry
 \end{enumerate}
-The Metadata block will be stored using the same scheme as the regular Metadata storage, and this block
-can be accessed as though the file belongs to the user that is shared with.
-When a user receives a sharing message, he should decrypt that message with his private RSA key and add
-the tuple to the Shared list in this block.
-Similarly, when a user shares any file, the share should send a message that is this tuple encrypted with the
-receiving user's public RSA key.
 
-\subsection{Data}
-\subsubsection{Naming}
-Let $s = username\texttt{.}filename\texttt{.}n\texttt{.data}$ where $n$ is the block number.
-Using $K_M$ found in \ref{sssec:meta_actions}, we find $m = \text{SHA256-HMAC}_{K_M}(s)$.
-This file will be stored at $m$.
+\subsection{Data Block}
+Contains:
+\begin{enumerate}
+\item File name
+\item Block Number
+\item Data
+\end{enumerate}
+"Put" at the file descriptor location + '.' + block number + '.' + data.
+Uses the same ENC and MAC keys as the file descriptor.
 
-\subsubsection{Contents}
-File name and block numbers are stored to check for block swapping by adversaries.
-32KB of data is stored.
-Each block has a randomly generated salt (generated every time a block is made) to prevent adversaries from
-being able to compare two blocks with the same information and knowing what they are.
-Finally, there is a MAC to make sure that nothing is tampered with.
+\subsection{How to Share}
+Take the file descriptor, and generate a shared descriptor that points to the descriptor.
+Add entry in shared list (tuple as described), and return encrypted with location of new descriptor and key.
 
-\subsubsection{Actions}
-This block is encrypted with $K_G$ and the MAC uses $K_C$, both from \ref{sssec:meta_actions}.
-The MAC should be checked before the data is used.
-When the data is received, the file name and block number should also be checked to make sure that they
-match what is expected.
-When all the Data blocks are downloaded and verified for integrity, simply piece the data in block order
-and return the string.
+\subsection{How to Receive}
+Take the message and add the descriptor location and key to your database.
+
+\subsection{How to Revoke}
+Re-generate key for file descriptor, relocate file descriptor, and re-encrypt data.
+Give everyone who was not revoked a new shared descriptor with this information.
+(Place at same location).
+
+\subsection{Diff Optimizations}
+Use transaction logging.
+When a user tries to upload, he goes through the transaction log and looks for which patch he owns (if any).
+He keeps a running total of all blocks he has changed since he last downloaded the file, and reuploads all blocks uploaded at those numbers that have changed.
+
+\section{Prevented Attacks}
+\subsection{Old-share key attack}
+If Alice shares file $f$ with Bob then revokes Bob's access, Bob is unable to access Alice's new updates
+after revokation, even if he stores the old key.
+This is because when Alice revokes Bob's access, Alice copies the entire file to a new location and changes
+the key for the file.
+If Bob were to try to use the old key, he is unable to decrypt this new file.
+
+\subsection{Revoked Child Attack}
+Alice shares a file $f$ with Bob then Bob shares the same file with Carol. 
+When Alice revokes Bob, Carol should not be able to get new updates to the file.
+This is possible because Carol's block points to Bob's block, which points to Alice's file.
+When Alice revokes Bob, Carol does not have access to the new key because Alice does not update
+Bob's block.
+
+\subsection{Share-stealing attack}
+When Alice sends a message to share a file with Bob, no one else should be able to receive this share.
+This is possible because Alice encrypts the share message with Bob's public key.
+
+\subsection{Non-owner revocation}
+When Alice shares a file with Bob and Carol, Bob should not be able to revoke Carol's access.
+Our implementation uses an encrypted share list, with a key that only Alice can access.
+There is also a MAC for this (also a key owned by just Alice).
+This means that if Bob changes anything, he is unable to calculate the MAC and we will raise
+an IntegrityError.
+
+\subsection{Buffer Overflow Attack}
+The client is written in Python, which is a memory-safe language.
+
+\subsection{Datablock Swap Attack}
+If a malicious server swaps two data blocks in a file, we should be able to detect that.
+Since we check the block number in the value 
 
 \end{document}
 
