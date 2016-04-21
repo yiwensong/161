@@ -1,7 +1,22 @@
 #!/usr/bin/python
 
 def manipulate(client_ip,client_port,server_ip,server_port,http_request):
-  return http_request
+  # print 'client_ip   ',client_ip  
+  # print 'client_port ',client_port    
+  # print 'server_ip   ',server_ip  
+  # print 'server_port ',server_port    
+  # print '\nhttp_request\n\nBEGIN HTTP REQUEST\n',http_request,'\nEND HTTP REQUEST\n\n\n\n'
+  # 
+  # print len(http_request)
+  # print len(http_request[:-7] + 'true' + http_request[-2:] + '\n')
+
+  # print '\n\n\n\n'
+
+  new_req = http_request[:-7] + 'true' + http_request[-2:] + '\n'
+
+  print new_req
+
+  return new_req
 
 ################################################################################
 ############### Under no circumstances, EVER, should you #######################
