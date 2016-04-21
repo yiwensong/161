@@ -3,7 +3,7 @@ Procedure:
 We checked the C code for holes and we found 2:
 
 * The common name parser stops at the next '/' character
-* The comparison is a string comparison
+* The comparison is a string comparison which stops checking after a null byte.
 
 -> This means that we can use the URLs:
   * data.gov-of-caltopia.info/.neocal.info
@@ -17,4 +17,26 @@ We inputted the files into the rewriter and put it into the CA website.
 Copy-paste the results into .x509 files, and loaded them (with the privkey file)
 into sslsniff.
 
-In rewriter.py, print the http_request.
+In rewriter.py, print the http_request, which had the secret in it.
+
+==================================================================================
+
+gov-of-caltopia.info defenses:
+
+* Don't have an emergency_kill field in the http request
+* Use a MAC or RSA signature to help with tamper resistance on HTTP requests
+
+==================================================================================
+
+Governer Stalloon defenses:
+
+* Change the router password
+* Update the certificate-accepting software so it doesn't have such large holes
+* Don't fuck with neo
+
+==================================================================================
+
+budget-certs-r-us.biz defenses:
+
+* Have a whitelist of characters for CNs to sign (i.e. don't let neo sign shit
+  with a null character in front of .neocal.info)
