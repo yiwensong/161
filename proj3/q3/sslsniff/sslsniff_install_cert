@@ -1,0 +1,35 @@
+#!/bin/bash
+
+SSLSNIFF=sslsniff
+LOG=/home/neo/q3/sslsniff.log
+PORT=4000
+CERTDIR=/home/neo/q3/.sslsniff_cert
+
+if [ $# -ne 2 ] ;
+then
+    echo "Usage: "$(basename "$0")" cert_to_install.x509 cert_to_install.priv"
+    exit 1
+fi;
+
+CERT=$1
+PRIV=$2
+
+OPENSSL=$(openssl x509 -in $CERT -text > /dev/null 2>&1)
+RET=$?
+
+if [ $RET -ne 0 ] ;
+then
+    echo "Invalid input cert."
+    exit 1
+fi
+
+OPENSSL=$(openssl rsa -in $PRIV -text > /dev/null 2>&1)
+RET=$?
+
+if [ $RET -ne 0 ] || head -n1 $PRIV|grep -q ENCRYPTED;
+then
+    echo "Invalid input private key."
+    exit 1
+fi
+
+cat $CERT <(echo) $PRIV > $CERTDIR/student_installed_cert

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+if [ $# -ne 2 ] ;
+then
+    echo "Usage: ./sign cert_request_to_sign.req cert_output.x509"
+    exit 1
+fi;
+
+IN=$1
+OUT=$2
+
+
+OPENSSL_CONF=digipwntar.cnf openssl ca -batch -notext -in $IN -out $OUT

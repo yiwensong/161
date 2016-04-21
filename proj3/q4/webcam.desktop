@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Governor's webcam
+Comment=
+Exec=ssvncviewer unix=/run/q4display
+Icon=preferences-desktop-remote-desktop
+Path=
+Terminal=false
+StartupNotify=false

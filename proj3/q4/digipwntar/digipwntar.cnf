@@ -1,0 +1,95 @@
+[ ca ]
+default_ca = DigiPwntar
+
+[ DigiPwntar ]
+
+# Where the issued certs are kept
+certs = certs
+
+# Where the issued crl are kept
+crl_dir = crl
+
+# Allow duplicate signings
+unique_subject = no
+
+# database index file
+database = index.txt
+
+# default place for new certs
+new_certs_dir = certs
+
+#
+# The CA certificate
+certificate = certs/ca.pem
+
+# The current serial number
+serial = serial
+
+# The current CRL
+crl = crl/crl.pem
+
+private_key = private/ca.key
+
+# private random number file
+RANDFILE = private/.rand
+
+# The extentions to add to the cert
+x509_extensions = usr_cert
+
+# how long to certify for
+default_days = 365
+
+# how long before next CRL
+default_crl_days= 30
+
+# which md to use
+default_md = sha256
+
+# keep passed DN ordering
+preserve = no
+
+# Section names
+policy = policy
+x509_extensions = certificate_extensions
+
+[ policy ]
+# Use the supplied information
+commonName = supplied
+stateOrProvinceName = optional
+countryName = supplied
+emailAddress = optional
+organizationName = optional
+organizationalUnitName = optional
+
+[ certificate_extensions ]
+# The signed certificate cannot be used as CA
+basicConstraints = CA:false
+
+[ req ]
+# same as private_key
+default_keyfile = ./private/ca.key
+
+# Which hash to use
+default_md = sha256
+
+# No prompts
+prompt = no
+
+# This is for CA
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+string_mask = utf8only
+basicConstraints = CA:true
+distinguished_name = root_ca_distinguished_name
+x509_extensions = root_ca_extensions
+
+[ root_ca_distinguished_name ]
+commonName = DigiPwntar
+stateOrProvinceName = Amsterdam
+countryName = NL
+emailAddress = None
+organizationName = DigiPwntar Certification Authority
+
+[ root_ca_extensions ]
+basicConstraints = CA:true
+

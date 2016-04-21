@@ -1,0 +1,36 @@
+#!/bin/bash
+
+SSLSNIFF=sslsniff
+REWRITER=/home/neo/q3/sslsniff/rewriter.py
+LOG=/home/neo/q3/sslsniff/sslsniff.log
+PORT=4000
+CERTDIR=/home/neo/q3/.sslsniff_cert
+IPTABLE_INTERFACE=iptables_redirect
+
+cert_error()
+{
+	echo 'ERROR! You need to install a certificate and private key first:'
+	$0"_install_cert"
+	exit 1
+}
+
+grep -qs 'CERTIFICATE' $CERTDIR/student_installed_cert || cert_error
+grep -qs 'PRIVATE KEY' $CERTDIR/student_installed_cert || cert_error
+
+$IPTABLE_INTERFACE A
+
+quit_sslsniff()
+{
+	kill -0 %1 &> /dev/null && kill %1
+	kill -0 %2 &> /dev/null && kill %2
+	$IPTABLE_INTERFACE F
+	exit 0
+}
+
+set +b -m
+trap quit_sslsniff CHLD EXIT
+
+$REWRITER &
+$SSLSNIFF -t -s $PORT -w $LOG -c $CERTDIR &
+
+wait
