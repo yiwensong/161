@@ -1,1 +1,20 @@
-what
+Procedure:
+
+We checked the C code for holes and we found 2:
+
+* The common name parser stops at the next '/' character
+* The comparison is a string comparison
+
+-> This means that we can use the URLs:
+  * data.gov-of-caltopia.info/.neocal.info
+  * data.gov-of-caltopia.info\x00.neocal.info
+
+We generated a private key and a Certificate Request with it for
+CN=lolwhocares.neocal.info
+and made two files with the URLs above.
+We inputted the files into the rewriter and put it into the CA website.
+
+Copy-paste the results into .x509 files, and loaded them (with the privkey file)
+into sslsniff.
+
+In rewriter.py, print the http_request.
