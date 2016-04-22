@@ -1,0 +1,13 @@
+a) To obtain the secret, first I added the private key
+   into the Wireshark RSA key list using the protocols interface.
+   Following that, I opened the packet capture file and loaded it,
+   and looked for the HTTP response from the server. The secret
+   was located in this frame.
+b) The cryptographic algorithms for this connection include:
+   TLS_RSA_WITH_AES_256_GCM_SHA384
+
+   This includes RSA, AES-256 in Galois Counter Mode, and SHA384 MACs
+c) The way to stop this kind of after-the-fact decryption, is to use
+   ephemeral keys, such as ephemeral Diffie Hellman Key Exchange.
+   Using this method, the keys are discarded after the connection,
+   so we cannot decrypt the data after.
