@@ -1,0 +1,4 @@
+#!/bin/sh
+
+./generate_rsa_pair
+cat q2b_privkey.priv

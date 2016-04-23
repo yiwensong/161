@@ -1,0 +1,8 @@
+Due to the coding error when seeding the RNG, it is very easy to brute
+force the private key. Line 148, reading "seed = time_micro_sec >> 7;",
+does not do what the line above it says it does. Instead of adding the
+microseconds, it sets it to the shift 7 right of the microseconds.
+This means the seed is from 0 to 7812 inclusive. This is a small
+number of seeds to try, so we can simply generate a key pair, and compare
+the public exponent with the public key of the server. If they match, we
+have generated the correct public private pair.

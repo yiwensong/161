@@ -1,0 +1,16 @@
+To obtain the secret, I used the DigiPwntar CA certificate to sign a
+certificate signing request I created for the email.gov-of-caltopia.info
+domain. Then I used the scapy script to inject a fake DNS response for
+email.gov-of-caltopia.info, redirecting it to the localhost whenever
+the Governor's PC queried it. This local web server is able to use the
+private keys and serve fake responses that the Chromium browser will
+accept as secure. Then, when the governor sends his password data,
+we can capture his password.
+
+There are two ways the Governor could have prevented this attack.
+The first is to use DNSSEC to create a chain of trust for the DNS
+query, so we are unable to spoof it without convincing the root,
+or one of the intermediate DNS servers to create a fake entry.
+The second is to either remove the DigiPwntar root from his browser,
+or pin the email server's private certificate. Then Chromium will not
+accept this as a valid cert.
